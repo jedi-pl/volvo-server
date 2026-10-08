@@ -21,7 +21,10 @@ services:
     profiles: ["tunnel"]
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:?ustaw TUNNEL_TOKEN w .env}
+    # BEZ `:?` -- Compose podstawia zmienne przy wczytywaniu CALEGO pliku,
+    # niezaleznie od profili. Z twardym wymogiem samo `docker compose up -d`
+    # wywalaloby sie na brak tokenu, mimo ze ten kontener wcale nie wstaje.
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
     depends_on:
       - telemetry
 

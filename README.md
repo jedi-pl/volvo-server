@@ -25,19 +25,30 @@ Sprawdzenie, czy wstało:
 curl http://127.0.0.1:8000/healthz
 ```
 
+### Dwa różne tokeny — nie pomyl ich
+
+| | Skąd pochodzi | Do czego |
+|---|---|---|
+| `TELEMETRY_TOKEN` | **ty go wymyślasz** (`openssl rand -hex 32`) | chroni API nagrań; ten sam ciąg musi być w `.env` i w `secrets.properties` aplikacji |
+| `TUNNEL_TOKEN` | **Cloudflare go generuje** | uwierzytelnia tunel; potrzebny *tylko* przy uruchamianiu `cloudflared` jako kontenera |
+
 ### Tunel
 
 **Masz już `cloudflared` na hoście** — skieruj go na `http://127.0.0.1:8000` i to wszystko.
+`TUNNEL_TOKEN` zostaw puste, profilu `tunnel` nigdy nie używaj. To jest ta prostsza droga.
 
-**Nie masz** — dopisz `TUNNEL_TOKEN` do `.env` (token tunelu z panelu Cloudflare) i uruchom
-z profilem:
+**Nie masz** — wygeneruj tunel w Cloudflare i uruchom go obok serwisu:
+
+1. Zero Trust → **Networks → Tunnels → Create a tunnel** → wybierz **Cloudflared**
+2. Jako środowisko wybierz **Docker** — Cloudflare pokaże gotową komendę, a w niej
+   po `--token` długi ciąg. To jest `TUNNEL_TOKEN`; skopiuj sam ciąg do `.env`
+3. W zakładce **Public Hostname** dodaj swoją domenę i skieruj ją na
+   `http://telemetry:8000` — to nazwa usługi w sieci composa, nie adres hosta
+4. Uruchom z profilem:
 
 ```bash
 docker compose --profile tunnel up -d
 ```
-
-W panelu Cloudflare skieruj wtedy hostname na `http://telemetry:8000` — to nazwa usługi
-w sieci composa, nie adres hosta.
 
 ### Co to znaczy dla bezpieczeństwa
 

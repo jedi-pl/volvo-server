@@ -1,0 +1,29 @@
+# TLS terminuje Cloudflare, wiec tu nie ma ani certyfikatow, ani portow
+# otwartych na swiat. Serwis slucha WYLACZNIE na petli zwrotnej.
+services:
+  telemetry:
+    build: .
+    restart: unless-stopped
+    environment:
+      TELEMETRY_TOKEN: ${TELEMETRY_TOKEN:?ustaw TELEMETRY_TOKEN w .env}
+    volumes:
+      - telemetry-data:/data
+    # 127.0.0.1, a nie 0.0.0.0: bez tego serwis wisialby na kazdym interfejsie
+    # hosta, czyli takze w sieci lokalnej, z samym tokenem jako ochrona.
+    # Tunel i tak siega go od srodka.
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  # Tunel w kontenerze -- dla tych, ktorzy nie maja cloudflared na hoscie.
+  # Startuje tylko z jawnym profilem:  docker compose --profile tunnel up -d
+  # W panelu Cloudflare skieruj hostname na  http://telemetry:8000
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:?ustaw TUNNEL_TOKEN w .env}
+    depends_on:
+      - telemetry
+
+volumes:
+  telemetry-data:

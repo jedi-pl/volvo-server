@@ -1,5 +1,5 @@
 # TLS terminuje Cloudflare, wiec tu nie ma ani certyfikatow, ani portow
-# otwartych na swiat. Serwis slucha WYLACZNIE na petli zwrotnej.
+# otwartych na swiat.
 services:
   telemetry:
     build: .
@@ -8,15 +8,17 @@ services:
       TELEMETRY_TOKEN: ${TELEMETRY_TOKEN:?ustaw TELEMETRY_TOKEN w .env}
     volumes:
       - telemetry-data:/data
-    # 127.0.0.1, a nie 0.0.0.0: bez tego serwis wisialby na kazdym interfejsie
+    # WYLACZNIE do sprawdzania z hosta (curl 127.0.0.1:8988/healthz).
+    # Tunel tego NIE uzywa - idzie siecia composa prosto do telemetry:8988,
+    # wiec to mapowanie mozna skasowac i wszystko bedzie dzialac dalej.
+    #
+    # 127.0.0.1, a nie 0.0.0.0: inaczej serwis wisialby na kazdym interfejsie
     # hosta, czyli takze w sieci lokalnej, z samym tokenem jako ochrona.
-    # Tunel i tak siega go od srodka.
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${HOST_PORT:-8988}:8988"
 
-  # Tunel w kontenerze -- dla tych, ktorzy nie maja cloudflared na hoscie.
-  # Startuje tylko z jawnym profilem:  docker compose --profile tunnel up -d
-  # W panelu Cloudflare skieruj hostname na  http://telemetry:8000
+  # Tunel w kontenerze -- tylko dla tych, ktorzy nie maja cloudflared osobno.
+  # Startuje wylacznie z jawnym profilem:  docker compose --profile tunnel up -d
   cloudflared:
     profiles: ["tunnel"]
     image: cloudflare/cloudflared:latest

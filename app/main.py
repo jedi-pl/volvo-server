@@ -78,7 +78,8 @@ def require_token(request: Request) -> None:
         raise HTTPException(401, "Zly token")
 
 
-SESSION = Path(pattern=r"^[A-Za-z0-9._-]{1,64}$")
+# Bez kropki: inaczej ".csv" wpada do {session} jako czesc nazwy sesji.
+SESSION = Path(pattern=r"^[A-Za-z0-9_-]{1,64}$")
 
 
 # --- zapis -------------------------------------------------------------------
@@ -143,11 +144,6 @@ def list_recordings() -> list[dict[str, Any]]:
     ]
 
 
-@app.get("/v1/recordings/{session}", dependencies=[Depends(require_token)])
-def read_recording(session: str = SESSION) -> list[dict[str, Any]]:
-    return list(_payloads(session))
-
-
 @app.get("/v1/recordings/{session}.csv", dependencies=[Depends(require_token)])
 def read_recording_csv(session: str = SESSION) -> StreamingResponse:
     """CSV, bo do strojenia progow i tak konczy sie na arkuszu albo wykresie.
@@ -177,6 +173,11 @@ def read_recording_csv(session: str = SESSION) -> StreamingResponse:
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{session}.csv"'},
     )
+
+
+@app.get("/v1/recordings/{session}", dependencies=[Depends(require_token)])
+def read_recording(session: str = SESSION) -> list[dict[str, Any]]:
+    return list(_payloads(session))
 
 
 @app.delete("/v1/recordings/{session}", dependencies=[Depends(require_token)])

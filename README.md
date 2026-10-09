@@ -7,7 +7,7 @@ dobierane z realnych pomiarów i zasługują na lepszy kanał niż aparat.
 ## Uruchomienie
 
 TLS terminuje Cloudflare, więc tu nie ma ani certyfikatów, ani portów otwartych na świat.
-Serwis słucha **wyłącznie na pętli zwrotnej** (`127.0.0.1:8000`) — tunel sięga go od środka.
+Serwis słucha **wyłącznie na pętli zwrotnej** (`127.0.0.1:8988`) — tunel sięga go od środka.
 
 ```bash
 cp .env.example .env
@@ -22,8 +22,29 @@ docker compose up -d --build
 Sprawdzenie, czy wstało:
 
 ```bash
-curl http://127.0.0.1:8000/healthz
+curl http://127.0.0.1:8988/healthz
 ```
+
+### Porty: która ósemka jest prawdziwa
+
+Liczba 8988 pojawia się w kilku miejscach i każde znaczy co innego:
+
+| Gdzie | Co to jest |
+|---|---|
+| `CMD --port 8988` w Dockerfile | port **wewnątrz** kontenera — ten jedyny jest prawdziwy |
+| `EXPOSE 8988` | wyłącznie dokumentacja, nie robi nic |
+| `ports: 127.0.0.1:8988:8988` | mapowanie na hosta, **tylko** do `curl` z hosta |
+
+Najmniej oczywiste i najważniejsze: **tunel idzie siecią composa prosto do
+`telemetry:8988`, więc mapowanie portów go w ogóle nie dotyczy.** Można je skasować
+i tunel będzie działał dalej.
+
+Jeśli port 8988 na hoście koliduje z czymś innym, zmień `HOST_PORT` w `.env`.
+Port wewnątrz kontenera zmieniaj **tylko razem z polem Service URL tunelu** — to dwie
+rzeczy, które muszą mówić tę samą liczbę.
+
+Sama wartość 8988 nie ma znaczenia; mogłoby być cokolwiek. Ważne, żeby zgadzała się
+w obu miejscach.
 
 ### Dwa różne tokeny — nie pomyl ich
 
@@ -34,8 +55,57 @@ curl http://127.0.0.1:8000/healthz
 
 ### Tunel
 
-**Masz już `cloudflared` na hoście** — skieruj go na `http://127.0.0.1:8000` i to wszystko.
-`TUNNEL_TOKEN` zostaw puste, profilu `tunnel` nigdy nie używaj. To jest ta prostsza droga.
+**Masz już `cloudflared`** — nie twórz nowego tunelu. Jeden tunel obsługuje wiele
+hostname'ów, więc wystarczy dodać trasę. `TUNNEL_TOKEN` zostaw puste, profilu `tunnel`
+nigdy nie używaj.
+
+Najpierw sprawdź, w którym trybie działa:
+
+```bash
+ps aux | grep -i cloudflared | grep -v grep
+```
+
+**Jest `--token`** → tryb zdalny, konfiguracja w panelu. Zero Trust → Networks → Tunnels →
+Twój tunel → zakładka **Public Hostname** → *Add a public hostname*:
+
+| Pole | Wartość |
+|---|---|
+| Subdomain / Domain | np. `metryki` + Twoja domena |
+| Type | `HTTP` |
+| URL | `localhost:8988` |
+
+Zapisujesz i działa — konfiguracja dojeżdża sama, bez restartu.
+
+**Nie ma `--token`** → tryb lokalny. Dopisz regułę do `ingress` w `config.yml`
+(`/etc/cloudflared/` albo `~/.cloudflared/`), **nad** regułą `service: http_status:404`,
+bo ona musi zostać ostatnia:
+
+```yaml
+ingress:
+  - hostname: metryki.twojadomena.pl
+    service: http://localhost:8988
+  - service: http_status:404
+```
+
+Potem wpis DNS i restart:
+
+```bash
+cloudflared tunnel route dns NAZWA-TUNELU metryki.twojadomena.pl
+```
+
+```bash
+sudo systemctl restart cloudflared
+```
+
+### Gdy cloudflared sam siedzi w kontenerze
+
+`localhost` oznacza wtedy pętlę zwrotną **tego kontenera**, a nie hosta — i tunel nie
+dosięgnie serwisu. Dwa wyjścia:
+
+- podepnij swój kontener `cloudflared` do sieci tego composa i kieruj go na
+  `http://telemetry:8988` (nazwa usługi, nie adres hosta)
+- albo uruchom go z `--add-host=host.docker.internal:host-gateway` i kieruj na
+  `http://host.docker.internal:8988`
 
 **Nie masz** — wygeneruj tunel w Cloudflare i uruchom go obok serwisu:
 
@@ -43,7 +113,7 @@ curl http://127.0.0.1:8000/healthz
 2. Jako środowisko wybierz **Docker** — Cloudflare pokaże gotową komendę, a w niej
    po `--token` długi ciąg. To jest `TUNNEL_TOKEN`; skopiuj sam ciąg do `.env`
 3. W zakładce **Public Hostname** dodaj swoją domenę i skieruj ją na
-   `http://telemetry:8000` — to nazwa usługi w sieci composa, nie adres hosta
+   `http://telemetry:8988` — to nazwa usługi w sieci composa, nie adres hosta
 4. Uruchom z profilem:
 
 ```bash
@@ -85,7 +155,7 @@ Wszystko poza `/healthz` wymaga nagłówka `Authorization: Bearer <token>`.
 
 Dokumentacja interaktywna: `https://TWOJA-DOMENA/docs`.
 
-Przez tunel — pod adresem z Cloudflare. Lokalnie na hoście — pod `127.0.0.1:8000`.
+Przez tunel — pod adresem z Cloudflare. Lokalnie na hoście — pod `127.0.0.1:8988`.
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" https://TWOJA-DOMENA/v1/recordings
